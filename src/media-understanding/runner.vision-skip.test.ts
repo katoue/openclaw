@@ -57,4 +57,35 @@ describe("runCapability image skip", () => {
       await cache.cleanup();
     }
   });
+
+  it("does NOT skip image understanding when explicit imageModel is configured, even if primary model supports vision", async () => {
+    const ctx: MsgContext = { MediaPath: "/tmp/image.png", MediaType: "image/png" };
+    const media = normalizeMediaAttachments(ctx);
+    const cache = createMediaAttachmentCache(media);
+    const cfg = {
+      agents: {
+        defaults: {
+          imageModel: "anthropic/claude-3-5-sonnet-20241022",
+        },
+      },
+    } as OpenClawConfig;
+
+    try {
+      const result = await runCapability({
+        capability: "image",
+        cfg,
+        ctx,
+        attachments: cache,
+        media,
+        providerRegistry: buildProviderRegistry(),
+        activeModel: { provider: "openai", model: "gpt-4.1" },
+      });
+
+      // Should NOT skip; should attempt to process with imageModel (even if it fails due to mock setup)
+      // The key is that it should NOT return early with "skipped" outcome
+      expect(result.decision.outcome).not.toBe("skipped");
+    } finally {
+      await cache.cleanup();
+    }
+  });
 });

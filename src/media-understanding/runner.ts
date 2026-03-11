@@ -704,39 +704,46 @@ export async function runCapability(params: {
     };
   }
 
-  // Skip image understanding when the primary model supports vision natively.
+  // Skip image understanding when the primary model supports vision natively,
+  // UNLESS an explicit imageModel is configured (which takes precedence).
   // The image will be injected directly into the model context instead.
   const activeProvider = params.activeModel?.provider?.trim();
   if (capability === "image" && activeProvider) {
-    const catalog = await loadModelCatalog({ config: cfg });
-    const entry = findModelInCatalog(catalog, activeProvider, params.activeModel?.model ?? "");
-    if (modelSupportsVision(entry)) {
-      if (shouldLogVerbose()) {
-        logVerbose("Skipping image understanding: primary model supports vision natively");
+    // Check if imageModel is explicitly configured
+    const configuredImageModels = resolveImageModelFromAgentDefaults(cfg);
+    const hasExplicitImageModel = configuredImageModels.length > 0;
+
+    if (!hasExplicitImageModel) {
+      const catalog = await loadModelCatalog({ config: cfg });
+      const entry = findModelInCatalog(catalog, activeProvider, params.activeModel?.model ?? "");
+      if (modelSupportsVision(entry)) {
+        if (shouldLogVerbose()) {
+          logVerbose("Skipping image understanding: primary model supports vision natively");
+        }
+        const model = params.activeModel?.model?.trim();
+        const reason = "primary model supports vision natively";
+        return {
+          outputs: [],
+          decision: {
+            capability,
+            outcome: "skipped",
+            attachments: selected.map((item) => {
+              const attempt = {
+                type: "provider" as const,
+                provider: activeProvider,
+                model: model || undefined,
+                outcome: "skipped" as const,
+                reason,
+              };
+              return {
+                attachmentIndex: item.index,
+                attempts: [attempt],
+                chosen: attempt,
+              };
+            }),
+          },
+        };
       }
-      const model = params.activeModel?.model?.trim();
-      const reason = "primary model supports vision natively";
-      return {
-        outputs: [],
-        decision: {
-          capability,
-          outcome: "skipped",
-          attachments: selected.map((item) => {
-            const attempt = {
-              type: "provider" as const,
-              provider: activeProvider,
-              model: model || undefined,
-              outcome: "skipped" as const,
-              reason,
-            };
-            return {
-              attachmentIndex: item.index,
-              attempts: [attempt],
-              chosen: attempt,
-            };
-          }),
-        },
-      };
     }
   }
 
